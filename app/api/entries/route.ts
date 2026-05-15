@@ -3,18 +3,33 @@ import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/weather";
 import { fetchPollen } from "@/lib/pollen";
 
+function dayBounds(dateStr: string): { start: Date; end: Date } {
+  const start = new Date(dateStr);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const date = searchParams.get("date");
+
+  let dateFilter: object = {};
+  if (date) {
+    const { start, end } = dayBounds(date);
+    dateFilter = { gte: start, lt: end };
+  } else {
+    dateFilter = {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to) } : {}),
+    };
+  }
 
   const entries = await prisma.entry.findMany({
-    where: {
-      date: {
-        ...(from ? { gte: new Date(from) } : {}),
-        ...(to ? { lte: new Date(to) } : {}),
-      },
-    },
+    where: { date: dateFilter },
     include: { symptoms: true, weather: true, pollen: true },
     orderBy: { date: "desc" },
   });
@@ -23,15 +38,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { recordedBy, symptoms, notes, weather, pollen } = body;
+  const { recordedBy, symptoms, notes, weather, pollen, date: dateStr } = body;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const { start, end } = dateStr
+    ? dayBounds(dateStr)
+    : (() => {
+        const s = new Date();
+        s.setHours(0, 0, 0, 0);
+        const e = new Date(s);
+        e.setDate(e.getDate() + 1);
+        return { start: s, end: e };
+      })();
 
   const existing = await prisma.entry.findFirst({
-    where: { date: { gte: today, lt: tomorrow } },
+    where: { date: { gte: start, lt: end } },
     include: { symptoms: true },
   });
 
@@ -39,13 +59,15 @@ export async function POST(req: NextRequest) {
   const lat = config?.lat ?? 48.2092;
   const lon = config?.lon ?? 16.3728;
 
+  const isToday = start.toDateString() === (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })().toDateString();
+
   let weatherData = weather;
   let pollenData = pollen;
 
-  if (!weatherData) {
+  if (!weatherData && isToday) {
     try { weatherData = { ...await fetchWeather(lat, lon), lat, lon }; } catch {}
   }
-  if (!pollenData) {
+  if (!pollenData && isToday) {
     try { pollenData = { ...await fetchPollen(lat, lon), lat, lon }; } catch {}
   }
 
@@ -62,22 +84,8 @@ export async function POST(req: NextRequest) {
             intensity: s.intensity,
           })),
         },
-        weather: weatherData
-          ? {
-              upsert: {
-                create: weatherData,
-                update: weatherData,
-              },
-            }
-          : undefined,
-        pollen: pollenData
-          ? {
-              upsert: {
-                create: pollenData,
-                update: pollenData,
-              },
-            }
-          : undefined,
+        weather: weatherData ? { upsert: { create: weatherData, update: weatherData } } : undefined,
+        pollen: pollenData ? { upsert: { create: pollenData, update: pollenData } } : undefined,
       },
       include: { symptoms: true, weather: true, pollen: true },
     });
@@ -86,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   const entry = await prisma.entry.create({
     data: {
-      date: today,
+      date: start,
       recordedBy,
       notes,
       symptoms: {

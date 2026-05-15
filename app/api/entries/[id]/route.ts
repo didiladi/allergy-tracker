@@ -14,22 +14,30 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { recordedBy, symptoms, notes } = body;
+  const { recordedBy, symptoms, notes, date: dateStr } = body;
 
   await prisma.symptom.deleteMany({ where: { entryId: id } });
 
+  const updateData: Parameters<typeof prisma.entry.update>[0]["data"] = {
+    recordedBy,
+    notes,
+    symptoms: {
+      create: symptoms.map((s: { type: string; intensity: number }) => ({
+        type: s.type,
+        intensity: s.intensity,
+      })),
+    },
+  };
+
+  if (dateStr) {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    updateData.date = d;
+  }
+
   const entry = await prisma.entry.update({
     where: { id },
-    data: {
-      recordedBy,
-      notes,
-      symptoms: {
-        create: symptoms.map((s: { type: string; intensity: number }) => ({
-          type: s.type,
-          intensity: s.intensity,
-        })),
-      },
-    },
+    data: updateData,
     include: { symptoms: true, weather: true, pollen: true },
   });
   return NextResponse.json(entry);

@@ -5,9 +5,6 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import SymptomSelector, { SymptomEntry } from "@/components/SymptomSelector";
 import UserToggle, { useUser } from "@/components/UserToggle";
 
-const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
-const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
-
 export default function EntryDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -16,6 +13,7 @@ export default function EntryDetailPage() {
   const [symptoms, setSymptoms] = useState<SymptomEntry[]>([]);
   const [notes, setNotes] = useState("");
   const [entry, setEntry] = useState<{ date: string; weather: unknown; pollen: unknown } | null>(null);
+  const [entryDate, setEntryDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -33,6 +31,8 @@ export default function EntryDetailPage() {
         setUser(d.recordedBy);
         setSymptoms(d.symptoms.map((s: { type: string; intensity: number }) => ({ type: s.type, intensity: s.intensity })));
         setNotes(d.notes ?? "");
+        const dateObj = new Date(d.date as string);
+        setEntryDate(`${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`);
       })
       .catch(() => router.push("/verlauf"));
   }, [params.id]);
@@ -42,7 +42,7 @@ export default function EntryDetailPage() {
     await fetch(`/api/entries/${params.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recordedBy: user, symptoms, notes }),
+      body: JSON.stringify({ recordedBy: user, symptoms, notes, date: entryDate }),
     });
     setSaving(false);
     router.push("/verlauf");
@@ -57,9 +57,6 @@ export default function EntryDetailPage() {
 
   if (!entry) return <div className="text-sm text-gray-400 animate-pulse">Wird geladen…</div>;
 
-  const d = new Date(entry.date as string);
-  const dateLabel = `${WEEKDAYS[d.getDay()]}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -67,7 +64,13 @@ export default function EntryDetailPage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{dateLabel}</h1>
+          <h1 className="text-xl font-bold text-gray-900">Eintrag bearbeiten</h1>
+          <input
+            type="date"
+            value={entryDate}
+            onChange={(e) => e.target.value && setEntryDate(e.target.value)}
+            className="text-sm text-gray-500 bg-transparent border-none focus:outline-none cursor-pointer mt-0.5"
+          />
         </div>
       </div>
 
