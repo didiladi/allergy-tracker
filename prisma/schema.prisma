@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Entry {
+  id         String      @id @default(cuid())
+  date       DateTime    @unique
+  recordedBy String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  notes      String?
+  symptoms   Symptom[]
+  weather    Weather?
+  pollen     PollenData?
+}
+
+model Symptom {
+  id        String @id @default(cuid())
+  entryId   String
+  entry     Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  type      String
+  intensity Int
+
+  @@unique([entryId, type])
+}
+
+model Weather {
+  id          String @id @default(cuid())
+  entryId     String @unique
+  entry       Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  temperature Float
+  humidity    Int
+  windSpeed   Float
+  condition   String
+  lat         Float
+  lon         Float
+}
+
+model PollenData {
+  id       String @id @default(cuid())
+  entryId  String @unique
+  entry    Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  birke    Int?
+  graeser  Int?
+  ambrosia Int?
+  beifuss  Int?
+  erle     Int?
+  hasel    Int?
+  lat      Float
+  lon      Float
+}
+
+model Config {
+  id    String @id @default("default")
+  lat   Float  @default(48.2092)
+  lon   Float  @default(16.3728)
+  city  String @default("Wien")
+  user1 String @default("Person 1")
+  user2 String @default("Person 2")
+}
