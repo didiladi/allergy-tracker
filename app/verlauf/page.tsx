@@ -38,27 +38,66 @@ function formatDate(iso: string) {
   return `${WEEKDAYS[d.getDay()]}, ${d.getDate()}. ${MONTHS[d.getMonth()]}`;
 }
 
+const RANGES = [
+  { key: "30", label: "30 Tage", days: 30 },
+  { key: "90", label: "90 Tage", days: 90 },
+  { key: "365", label: "Jahr", days: 365 },
+  { key: "all", label: "Alle", days: null },
+] as const;
+
+type RangeKey = (typeof RANGES)[number]["key"];
+
 export default function VerlaufPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<RangeKey>("all");
 
   useEffect(() => {
-    const from = new Date();
-    from.setDate(from.getDate() - 30);
-    fetch(`/api/entries?from=${from.toISOString().slice(0, 10)}`)
+    setLoading(true);
+    const days = RANGES.find((r) => r.key === range)?.days ?? null;
+    let query = "";
+    if (days !== null) {
+      const from = new Date();
+      from.setDate(from.getDate() - days);
+      query = `?from=${from.toISOString().slice(0, 10)}`;
+    }
+    fetch(`/api/entries${query}`)
       .then((r) => r.json())
       .then((d) => { setEntries(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [range]);
+
+  const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? "";
+
+  const rangeToggle = (
+    <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1 w-fit">
+      {RANGES.map((r) => (
+        <button
+          key={r.key}
+          onClick={() => setRange(r.key)}
+          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+            range === r.key
+              ? "bg-white shadow text-emerald-700 font-semibold"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
 
   if (loading) return <div className="text-sm text-gray-400 animate-pulse">Wird geladen…</div>;
 
   if (entries.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400">
-        <p className="text-4xl mb-3">📋</p>
-        <p className="text-sm">Noch keine Einträge vorhanden.</p>
-        <Link href="/" className="mt-4 inline-block text-sm text-emerald-600 hover:underline">Ersten Eintrag erstellen →</Link>
+      <div className="space-y-4">
+        {rangeToggle}
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-4xl mb-3">📋</p>
+          <p className="text-sm">{range === "all" ? "Noch keine Einträge vorhanden." : `Keine Einträge im Zeitraum "${rangeLabel}".`}</p>
+          <Link href="/" className="mt-4 inline-block text-sm text-emerald-600 hover:underline">Ersten Eintrag erstellen →</Link>
+        </div>
       </div>
     );
   }
@@ -66,7 +105,10 @@ export default function VerlaufPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-gray-900">Verlauf</h1>
-      <p className="text-sm text-gray-500">{entries.length} Einträge der letzten 30 Tage</p>
+      {rangeToggle}
+      <p className="text-sm text-gray-500">
+        {entries.length} Einträge{range === "all" ? "" : ` (${rangeLabel})`}
+      </p>
 
       <div className="space-y-2">
         {entries.map((entry) => (
